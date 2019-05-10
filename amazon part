@@ -1,0 +1,18 @@
+---
+title: "final project for data wrangling"
+author: "Saide Tang"
+date: "4/9/2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+This is the second part, which is to apply Amazon data source 
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(rvest)
+library(lubridate)
+library(stringr)
+
+```
