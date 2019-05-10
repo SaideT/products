@@ -1,0 +1,15 @@
+
+```{r, echo=FALSE}
+library(twitteR)
+library(rtweet)
+library(httr)
+library(curl)
+library(jsonlite)
+library(dplyr)
+library(tidytext)
+library(stringr)
+library(purrr)
+library(ggplot2)
+library(tidyr)
+library(wordcloud)
+```
