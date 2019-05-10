@@ -12,3 +12,48 @@ library(ggplot2)
 library(tidyr)
 library(wordcloud)
 
+# Get the api keys from twitter and setup twitter oauth
+
+key <- "key1"
+secret <- "secret1"
+access_token <- "access_token1"
+access_secret <- "access_secret1"
+setup_twitter_oauth(key, secret, access_token, access_secret)
+
+# Search twitter and save them to data frames
+
+tw1 = searchTwitter('natural shampoo', n = 1000, lang = "en")
+d1 = twListToDF(tw1)
+tw2 = searchTwitter('natural conditioner', n = 1000, lang = "en")
+d2 = twListToDF(tw2)
+
+# Data clean for d1, then save them in a bigram (word pair) form, then remove the stopwords as well as the obvious words of "natural" and "shampoo"
+
+d1_text <- d1 %>% select(text) %>% distinct() %>% as.matrix()
+d1_tidy <- d1_text %>% 
+  str_replace_all("http.+", "") %>% 
+  str_remove_all("^RT") %>% 
+  str_remove_all("&amp") %>% 
+  str_remove_all("#.+") %>%
+  as_tibble()
+d1_tidy2 <- d1_tidy %>% 
+  unnest_tokens(bigram, value, token = "ngrams", n = 2)
+d1_tidy3 <- d1_tidy2 %>% 
+  separate(bigram, c("word1", "word2"), sep = " ")
+d1_tidy4 <- d1_tidy3 %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word) %>% 
+  filter(!word1 %in% c("natural", "shampoo")) %>% 
+  filter(!word2 %in% c("natural", "shampoo"))
+d1_tidy5 <- d1_tidy4 %>% unite(word_pair, word1, word2, sep = " ")
+
+# make the plot of top 20 word pairs
+
+d1_tidy5 %>% 
+  count(word_pair, sort = TRUE) %>% 
+  .[1:20, ] %>% 
+  mutate(word_pair = reorder(word_pair, n)) %>% 
+  ggplot(aes(word_pair,n)) + 
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  ylab("Counts") + xlab("Popular Word Pairs") + ggtitle("Topics about 'Natural Shampoo' in Twitter")
