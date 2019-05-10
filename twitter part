@@ -1,15 +1,4 @@
----
-title: "final project for data wrangling class"
-author: "Saide Tang"
-date: "4/23/2019"
-output:
-  pdf_document: default
-  word_document: default
----
 
-
-
-```{r, echo=FALSE}
 library(twitteR)
 library(rtweet)
 library(httr)
@@ -22,4 +11,4 @@ library(purrr)
 library(ggplot2)
 library(tidyr)
 library(wordcloud)
-```
+
