@@ -27,7 +27,10 @@ d1 = twListToDF(tw1)
 tw2 = searchTwitter('natural conditioner', n = 1000, lang = "en")
 d2 = twListToDF(tw2)
 
-# Data clean for d1, then save them in a bigram (word pair) form, then remove the stopwords as well as the obvious words of "natural" and "shampoo"
+# 1. Top word pairs in all tweets with “natural shampoo/conditioner” ---------------------------------------------------------
+
+# Data clean for d1(natural shampoo), then save them in a bigram (word pair) form, then remove the stopwords as well as 
+# the obvious words of "natural" and "shampoo".
 
 d1_text <- d1 %>% select(text) %>% distinct() %>% as.matrix()
 d1_tidy <- d1_text %>% 
@@ -57,3 +60,37 @@ d1_tidy5 %>%
   geom_bar(stat = 'identity') +
   coord_flip() +
   ylab("Counts") + xlab("Popular Word Pairs") + ggtitle("Topics about 'Natural Shampoo' in Twitter")
+  
+# Data clean for d2(natural conditioner), then save them in a bigram (word pair) form, then remove the stopwords as well as  
+# the obvious words of"natural" and "conditioner".
+
+d2_text <- d2 %>% select(text) %>% distinct() %>% as.matrix()
+d2_tidy <- d2_text %>% 
+  str_replace_all("http.+", "") %>% 
+  str_remove_all("^RT") %>% 
+  str_remove_all("&amp") %>% 
+  str_remove_all("#.+") %>%
+  as_tibble()
+d2_tidy2 <- d2_tidy %>% 
+  unnest_tokens(bigram, value, token = "ngrams", n = 2)
+d2_tidy3 <- d2_tidy2 %>% 
+  separate(bigram, c("word1", "word2"), sep = " ")
+d2_tidy4 <- d2_tidy3 %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word) %>% 
+  filter(!word1 %in% c("natural", "conditioner")) %>% 
+  filter(!word2 %in% c("natural", "conditioner"))
+d2_tidy5 <- d2_tidy4 %>% unite(word_pair, word1, word2, sep = " ") %>% 
+  count(word_pair, sort = TRUE)
+
+# Make the plot of top 20 word pairs
+
+d2_tidy5[1:20, ] %>% 
+  mutate(word_pair = reorder(word_pair, n)) %>% 
+  ggplot(aes(word_pair,n)) + 
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  ylab("Counts") + xlab("Popular Word Pairs") + ggtitle("Topics about 'Natural conditioner' in Twitter")
+  
+  # 2. Top word pairs in all tweets with “natural shampoo/conditioner” ---------------------------------------------------------
+
