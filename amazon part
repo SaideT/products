@@ -106,7 +106,7 @@ all_product %>% ggplot(aes(type, price)) +
   ylab("list price on amazon in dollars") +
   ggtitle("Prices of Hair Care Products in Amazon")
   
-  # 5. Furtherly divide the products into categories of "shampoo", "conditioner", "2-in-1" and "combo"----------------------------------------------
+# 5. Furtherly divide the products into categories of "shampoo", "conditioner", "2-in-1" and "combo"----------------------------------------------
   
 shampoo <- all_product %>% filter(str_detect(all_product$product, "shampoo") == TRUE & str_detect(all_product$product, "conditioner") == FALSE)
 shampoo <- shampoo %>% mutate(category = "shampoo_only")
@@ -131,9 +131,9 @@ all2 %>% ggplot(aes(type, price, color = type)) +
   ylab("list price") +
   ggtitle("Prices of Different Hair Care Products in Amazon")
   
-# 5. Extract the volume information and analyze the unit price of different products------------------------------------------------------
+# 6. Extract the volume information and analyze the unit price of different products------------------------------------------------------
 
-# 5.1 Extract the pack information of the products
+# 6.1 Extract the pack information of the products
 
 with_volume <- all2 %>% filter(str_detect(all2$product, "oz|ounce|fz|gallon|ml")==TRUE )
 shampoo2 <- with_volume %>% filter(with_volume$category =="shampoo_only")
@@ -153,7 +153,7 @@ more_pack <- more_pack %>% mutate(pack = pack_n)
 shampoo2 <- rbind(single_pack, twin_pack, more_pack)
 shampoo2$pack <- shampoo2$pack %>% as.numeric()
 
-# 5.2 Extract the item volume information of the shampoo products
+# 6.2 Extract the item volume information of the shampoo products
 
 oz <- shampoo2 %>% filter(str_detect(shampoo2$product, "oz|ounce|fz")==TRUE)
 gallon <- shampoo2 %>% filter(str_detect(shampoo2$product, "gallon")==TRUE)
@@ -180,7 +180,7 @@ ml <- ml %>% mutate(unit_price = price/volume/pack)
 
 shampoo2 <- rbind(oz, gallon, ml)
 
-# 5.3 Extract the pack and item volume information of the conditioner products
+# 6.3 Extract the pack and item volume information of the conditioner products
 
 conditioner2 <- with_volume %>% filter(with_volume$category =="conditioner_only")
 with_pack <- conditioner2 %>% 
@@ -218,7 +218,7 @@ ml <- ml %>% mutate(unit_price = price/volume/pack)
 
 conditioner2 <- rbind(oz, gallon, ml)
 
-# 5.4 Extract the pack and item volume information of the 2-in-1 products
+# 6.4 Extract the pack and item volume information of the 2-in-1 products
 
 two_in_one2 <- with_volume %>% filter(with_volume$category =="two_in_one")
 with_pack <- two_in_one2 %>% 
@@ -255,7 +255,7 @@ ml <- ml %>% mutate(volume = volume*0.0338)
 ml <- ml %>% mutate(unit_price = price/volume/pack)
 two_in_one2 <- rbind(oz, gallon, ml)
 
-# 5.5 Extract the pack and item volume information of the combo products
+# 6.5 Extract the pack and item volume information of the combo products
 
 combo2 <- with_volume %>% filter(with_volume$category =="combo")
 with_pack <- combo2 %>% 
@@ -299,7 +299,7 @@ ml <- ml %>% mutate(volume = volume*0.0338)
 ml <- ml %>% mutate(unit_price = price/volume/pack)
 combo2 <- rbind(oz, gallon, ml)
 
-# 5.6 With all the information we need, we can compare the unit price of different products
+# 6.6 With all the information we need, we can compare the unit price of different products
 
 all3 <- rbind(shampoo2, conditioner2, two_in_one2, combo2)
 
@@ -322,7 +322,7 @@ all3 %>% ggplot(aes(category, unit_price, color = category)) +
   facet_wrap(~type, ncol = 1) +
   ylim(0, 6) 
 
-# 5.7 Linear relation of unit price ~ total volume of each product
+# 6.7 Linear relation of unit price ~ total volume of each product
 
 all4 <- all3 %>% mutate(total_volume = volume*pack)
 
