@@ -4,4 +4,337 @@ library(rvest)
 library(lubridate)
 library(stringr)
 
+# 1. Scrape Amazon product information for shampoo/conditioner products--------------------------------------------------------------------
 
+# Get the information of first 10 pages for searching certain product
+
+shampoo_all <- NULL
+for(i in 1:10){
+  url <- paste0("https://www.amazon.com/s?k=shampoo&i=beauty&page=",i,"&qid=1557324481&ref=sr_pg_",i )
+  
+  amazon_shampoo <- read_html(url) %>% 
+    html_nodes(".a-text-normal") %>%
+    html_text()
+  
+  amazon_shampoo <- amazon_shampoo %>% str_remove_all("\n")
+  amazon_shampoo <- tibble(text = amazon_shampoo)
+  shampoo_all <- rbind(shampoo_all, amazon_shampoo)
+}
+
+conditioner_all <- NULL
+for(i in 1:10){
+  url <- paste0("https://www.amazon.com/s?k=conditioner&i=beauty&page=",i,"&qid=1557324481&ref=sr_pg_",i )
+  
+  amazon_conditioner <- read_html(url) %>% 
+    html_nodes(".a-text-normal") %>%
+    html_text()
+  
+  amazon_conditioner <- amazon_conditioner %>% str_remove_all("\n")
+  amazon_conditioner <- tibble(text = amazon_conditioner)
+  conditioner_all <- rbind(conditioner_all, amazon_conditioner)
+}
+
+both_all <- NULL
+for(i in 1:10){
+  url <- paste0("https://www.amazon.com/s?k=shampoo+conditioner&i=beauty&lo=grid&page=",i,"&qid=1557322933&ref=sr_pg_",i )
+  
+  amazon_both <- read_html(url) %>% 
+    html_nodes(".a-text-normal") %>%
+    html_text()
+  
+  amazon_both <- amazon_both %>% str_remove_all("\n")
+  amazon_both <- tibble(text = amazon_both)
+  both_all <- rbind(both_all, amazon_both)
+}
+
+amazon_text <- rbind(shampoo_all, conditioner_all, both_all)
+
+# 2. Extract the information of product text and price then organized them as a date frame----------------------------------------------
+
+amazon_text2 <- amazon_text %>% as.matrix()
+amazon_selected = ""
+j = 2
+for (i in 1:lengths(amazon_text)){
+  if (str_detect(amazon_text2[i], "\\$") == TRUE){
+    amazon_selected[j-1] = amazon_text2[i-1]
+    amazon_selected[j] = amazon_text2[i]
+    j = j+2
+  }
+}
+amazon_selected2 <- amazon_selected %>% as.tibble()
+price1 = ""
+name1 = ""
+j = 1
+k = 1
+for (i in 1:lengths(amazon_selected2)){
+  if (i %% 2 == 1){
+    name1[j] = amazon_selected[i]
+    j = j+1
+  }
+  else{
+    price1[k] = amazon_selected[i]
+    k = k+1
+  }
+}
+name1 <- name1 %>% as.tibble()
+table1 <- name1 %>% mutate(price = price1)
+table1 <- rename(table1, product = 'value')
+table1 <- table1 %>% distinct()
+
+# 3. Extract and clean the price information----------------------------------------------------------------------------------------------
+
+table1$price <- table1$price %>% strsplit("\\$")
+for (i in 1:lengths(table1)){
+  table1$price[[i]] = table1$price[[i]][[2]]
+}
+table1$price <- table1$price %>% unlist()
+table2 <- table1
+table2$price <- as.numeric(table2$price)
+
+# 4. Divide the products into "natural" and "normal" types-----------------------------------------------------------------------------
+
+table2$product <- tolower(table2$product)
+table3 <- table2 %>% filter(str_detect(table2$product, "natural|naturals|tea tree|aloe vera|coconut|shear butter|argan oil|herbal") == TRUE)
+natural <- table3 %>% mutate(type = "natural")
+table4 <- table2 %>% anti_join(table3)
+normal <- table4 %>% mutate(type = "normal")
+all_product <- bind_rows(natural, normal)
+all_product %>% ggplot(aes(type, price)) +
+  geom_boxplot() +
+  scale_color_manual(values= c("limegreen", "orangered")) +
+  xlab("type of products") +
+  ylab("list price on amazon in dollars") +
+  ggtitle("Prices of Hair Care Products in Amazon")
+  
+  # 5. Furtherly divide the products into categories of "shampoo", "conditioner", "2-in-1" and "combo"----------------------------------------------
+  
+shampoo <- all_product %>% filter(str_detect(all_product$product, "shampoo") == TRUE & str_detect(all_product$product, "conditioner") == FALSE)
+shampoo <- shampoo %>% mutate(category = "shampoo_only")
+conditioner <- all_product %>% filter(str_detect(all_product$product, "shampoo") == FALSE & str_detect(all_product$product, "conditioner") == TRUE)
+conditioner <- conditioner %>% mutate(category = "conditioner_only")
+
+both <- all_product %>% filter(str_detect(all_product$product, "shampoo") == TRUE & str_detect(all_product$product, "conditioner") == TRUE)
+two_in_one <- both %>% filter(str_detect(both$product, "2 in 1|2-in-1|2in1") == TRUE)
+two_in_one <- two_in_one %>% mutate(category = "two_in_one")
+combo <- both %>%
+  anti_join(two_in_one) %>% 
+  mutate(category = "combo")
+  
+all2 <- bind_rows(combo, two_in_one, shampoo, conditioner)
+all2 <- all2 %>% unite(group, type, category, remove = FALSE)
+table(all2$group)
+all2 %>% ggplot(aes(type, price, color = type)) +
+  geom_boxplot() +
+  scale_color_manual(values=c("limegreen", "orangered")) +
+  facet_wrap(~category, ncol = 4) +
+  xlab("type of products") +
+  ylab("list price") +
+  ggtitle("Prices of Different Hair Care Products in Amazon")
+  
+# 5. Extract the volume information and analyze the unit price of different products------------------------------------------------------
+
+# 5.1 Extract the pack information of the products
+
+with_volume <- all2 %>% filter(str_detect(all2$product, "oz|ounce|fz|gallon|ml")==TRUE )
+shampoo2 <- with_volume %>% filter(with_volume$category =="shampoo_only")
+with_pack <- shampoo2 %>% 
+  filter(str_detect(shampoo2$product, "pack|pk|case of|tubes|count")==TRUE & str_detect(shampoo2$product, "packaging") == FALSE)
+  
+#if there is no "pack" shown in text, it means single pack
+single_pack <- shampoo2 %>% anti_join(with_pack)
+twin_pack <- with_pack %>% 
+  filter(str_detect(with_pack$product, "twin|duo|double|combo")==TRUE)
+more_pack <- with_pack %>% anti_join(twin_pack)
+
+single_pack <- single_pack %>% mutate(pack = 1)
+twin_pack <- twin_pack %>% mutate(pack = 2)
+pack_n <- more_pack$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\-pack|packof[0-9]+|[0-9]+pk|pkof[0-9]+|[0-9]+pack|caseof[0-9]+|[0-9]+tubes|[0-9]+count") %>% str_extract("[0-9]+")
+more_pack <- more_pack %>% mutate(pack = pack_n)
+shampoo2 <- rbind(single_pack, twin_pack, more_pack)
+shampoo2$pack <- shampoo2$pack %>% as.numeric()
+
+# 5.2 Extract the item volume information of the shampoo products
+
+oz <- shampoo2 %>% filter(str_detect(shampoo2$product, "oz|ounce|fz")==TRUE)
+gallon <- shampoo2 %>% filter(str_detect(shampoo2$product, "gallon")==TRUE)
+ml <- shampoo2 %>% anti_join(oz) %>% anti_join(gallon)
+
+oz_v <- oz$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*-?ounce|[0-9]+\\.?[0-9]*\\-?fl|[0-9]+\\.?[0-9]*-?fluid|[0-9]+\\.?[0-9]*\\-?oz") %>% str_extract("[[0-9]\\.]+")
+oz <- oz %>% mutate(volume = oz_v)
+oz$volume <- oz$volume %>% as.numeric()
+oz <- oz %>% mutate(unit_price = price/volume/pack)
+
+gallon_v <- gallon$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*\\-?gallon") %>% str_extract("[[0-9]\\.]+")  
+gallon <- gallon %>% mutate(volume = gallon_v)
+gallon$volume <- gallon$volume %>% as.numeric()
+gallon <- gallon %>% mutate(volume = volume*128)
+gallon <- gallon %>% mutate(unit_price = price/volume/pack)
+
+ml_v <- ml$product %>% str_remove_all(" ") %>%
+  str_extract("[0-9]+\\.?[0-9]*\\-?ml") %>%
+  str_extract("[[0-9]\\.]+") 
+ml <- ml %>% mutate(volume = ml_v)
+ml$volume <- ml$volume %>% as.numeric()
+ml <- ml %>% mutate(volume = volume*0.0338)
+ml <- ml %>% mutate(unit_price = price/volume/pack)
+
+shampoo2 <- rbind(oz, gallon, ml)
+
+# 5.3 Extract the pack and item volume information of the conditioner products
+
+conditioner2 <- with_volume %>% filter(with_volume$category =="conditioner_only")
+with_pack <- conditioner2 %>% 
+  filter(str_detect(conditioner2$product, "pack|pk|case of|tubes|count")==TRUE & str_detect(conditioner2$product, "packaging") == FALSE)
+single_pack <- conditioner2 %>% anti_join(with_pack)
+twin_pack <- with_pack %>% 
+  filter(str_detect(with_pack$product, "twin|duo|double")==TRUE)
+more_pack <- with_pack %>% anti_join(twin_pack)
+single_pack <- single_pack %>% mutate(pack = 1)
+twin_pack <- twin_pack %>% mutate(pack = 2)
+pack_n <- more_pack$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\-pack|packof[0-9]+|[0-9]+pk|pkof[0-9]+|[0-9]+pack|caseof[0-9]+|[0-9]+tubes|[0-9]+count") %>% str_extract("[0-9]+")
+more_pack <- more_pack %>% mutate(pack = pack_n)
+conditioner2 <- rbind(single_pack, twin_pack, more_pack)
+conditioner2$pack <- conditioner2$pack %>% as.numeric()
+
+oz <- conditioner2 %>% filter(str_detect(conditioner2$product, "oz|ounce|fz")==TRUE)
+gallon <- conditioner2 %>% filter(str_detect(conditioner2$product, "gallon")==TRUE)
+ml <- conditioner2 %>% anti_join(oz) %>% anti_join(gallon)
+oz_v <- oz$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*-?ounce|[0-9]+\\.?[0-9]*\\-?fl|[0-9]+\\.?[0-9]*-?fluid|[0-9]+\\.?[0-9]*\\-?oz") %>% str_extract("[[0-9]\\.]+") 
+oz <- oz %>% mutate(volume = oz_v)
+oz$volume <- oz$volume %>% as.numeric()
+oz <- oz %>% mutate(unit_price = price/volume/pack)
+gallon_v <- gallon$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*\\-?gallon") %>% str_extract("[[0-9]\\.]+")  
+gallon <- gallon %>% mutate(volume = gallon_v)
+gallon$volume <- gallon$volume %>% as.numeric()
+gallon <- gallon %>% mutate(volume = volume*128)
+gallon <- gallon %>% mutate(unit_price = price/volume/pack)
+ml_v <- ml$product %>% str_remove_all(" ") %>%
+  str_extract("[0-9]+\\.?[0-9]*\\-?ml") %>%
+  str_extract("[[0-9]\\.]+") 
+ml <- ml %>% mutate(volume = ml_v)
+ml$volume <- ml$volume %>% as.numeric()
+ml <- ml %>% mutate(volume = volume*0.0338)
+ml <- ml %>% mutate(unit_price = price/volume/pack)
+
+conditioner2 <- rbind(oz, gallon, ml)
+
+# 5.4 Extract the pack and item volume information of the 2-in-1 products
+
+two_in_one2 <- with_volume %>% filter(with_volume$category =="two_in_one")
+with_pack <- two_in_one2 %>% 
+  filter(str_detect(two_in_one2$product, "pack|pk|case of|tubes|count")==TRUE & str_detect(two_in_one2$product, "packaging") == FALSE)
+single_pack <- two_in_one2 %>% anti_join(with_pack)
+twin_pack <- with_pack %>% 
+  filter(str_detect(with_pack$product, "twin|duo|double")==TRUE)
+more_pack <- with_pack %>% anti_join(twin_pack)
+single_pack <- single_pack %>% mutate(pack = 1)
+twin_pack <- twin_pack %>% mutate(pack = 2)
+pack_n <- more_pack$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\-pack|packof[0-9]+|[0-9]+pk|pkof[0-9]+|[0-9]+pack|caseof[0-9]+|[0-9]+tubes|[0-9]+count") %>% str_extract("[0-9]+")
+more_pack <- more_pack %>% mutate(pack = pack_n)
+two_in_one2 <- rbind(single_pack, twin_pack, more_pack)
+two_in_one2$pack <- two_in_one2$pack %>% as.numeric()
+
+oz <- two_in_one2 %>% filter(str_detect(two_in_one2$product, "oz|ounce|fz")==TRUE)
+gallon <- two_in_one2 %>% filter(str_detect(two_in_one2$product, "gallon")==TRUE)
+ml <- two_in_one2 %>% anti_join(oz) %>% anti_join(gallon)
+oz_v <- oz$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*-?ounce|[0-9]+\\.?[0-9]*\\-?fl|[0-9]+\\.?[0-9]*-?fluid|[0-9]+\\.?[0-9]*\\-?oz") %>% str_extract("[[0-9]\\.]+") 
+oz <- oz %>% mutate(volume = oz_v)
+oz$volume <- oz$volume %>% as.numeric()
+oz <- oz %>% mutate(unit_price = price/volume/pack)
+gallon_v <- gallon$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*\\-?gallon") %>% str_extract("[[0-9]\\.]+") 
+gallon <- gallon %>% mutate(volume = gallon_v)
+gallon$volume <- gallon$volume %>% as.numeric()
+gallon <- gallon %>% mutate(volume = volume*128)
+gallon <- gallon %>% mutate(unit_price = price/volume/pack)
+ml_v <- ml$product %>% str_remove_all(" ") %>%
+  str_extract("[0-9]+\\.?[0-9]*\\-?ml") %>%
+  str_extract("[[0-9]\\.]+") 
+ml <- ml %>% mutate(volume = ml_v)
+ml$volume <- ml$volume %>% as.numeric()
+ml <- ml %>% mutate(volume = volume*0.0338)
+ml <- ml %>% mutate(unit_price = price/volume/pack)
+two_in_one2 <- rbind(oz, gallon, ml)
+
+# 5.5 Extract the pack and item volume information of the combo products
+
+combo2 <- with_volume %>% filter(with_volume$category =="combo")
+with_pack <- combo2 %>% 
+  filter(str_detect(combo2$product, "pack| pk|case of|tubes|items|count|lot of")==TRUE & str_detect(combo2$product, "packaging|package") == FALSE)
+# twin_pack1 is the ones without "pack" shown in the name. but as combo, they are with two items (pack of two)
+twin_pack1 <- combo2 %>% anti_join(with_pack)
+twin_pack2 <- with_pack %>% 
+  filter(str_detect(with_pack$product, "twin|duo|double|dual|combo|combination|value|bundle")==TRUE)
+more_pack <- with_pack %>% anti_join(twin_pack2)
+twin_pack1 <- twin_pack1 %>% mutate(pack = 2)
+twin_pack2 <- twin_pack2 %>% mutate(pack = 2)
+pack_n <- more_pack$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\-pack|packof[0-9]+|[0-9]+pk|pkof[0-9]+|[0-9]+pack|caseof[0-9]+|[0-9]+tubes|[0-9]+count|[0-9]+each|[0-9]+ofeach") %>% str_extract("[0-9]+")
+more_pack <- more_pack %>% mutate(pack = pack_n)
+combo2 <- rbind(twin_pack1, twin_pack2, more_pack)
+combo2$pack <- combo2$pack %>% as.numeric()
+
+# Correct some pack numbers, since some products show misleading information for the packs
+for(i in 1:lengths(combo2)){
+  if(combo2$pack[[i]] == 3 & str_detect(combo2$product[[i]], "body wash|bodywash") == TRUE) {combo2$pack[[i]] <- 2}
+  else if(str_detect(combo2$product[[i]], "count")==FALSE&combo2$pack[[i]] != 2){combo2$pack[[i]] <- 2*combo2$pack[[i]]}
+  }
+
+oz <- combo2 %>% filter(str_detect(combo2$product, "oz|ounce|fz")==TRUE)
+gallon <- combo2 %>% filter(str_detect(combo2$product, "gallon")==TRUE)
+ml <- combo2 %>% anti_join(oz) %>% anti_join(gallon)
+oz_v <- oz$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*-?ounce|[0-9]+\\.?[0-9]*\\-?fl|[0-9]+\\.?[0-9]*-?fluid|[0-9]+\\.?[0-9]*\\-?oz") %>% str_extract("[[0-9]\\.]+") 
+oz <- oz %>% mutate(volume = oz_v)
+oz$volume <- oz$volume %>% as.numeric()
+oz <- oz %>% mutate(unit_price = price/volume/pack)
+gallon_v <- gallon$product %>% str_remove_all(" ") %>% str_extract("[0-9]+\\.?[0-9]*\\-?gallon") %>% str_extract("[[0-9]\\.]+") 
+gallon <- gallon %>% mutate(volume = gallon_v)
+gallon$volume <- gallon$volume %>% as.numeric()
+gallon <- gallon %>% mutate(volume = volume*128)
+gallon <- gallon %>% mutate(unit_price = price/volume/pack)
+ml_v <- ml$product %>% str_remove_all(" ") %>%
+  str_extract("[0-9]+\\.?[0-9]*\\-?ml") %>%
+  str_extract("[[0-9]\\.]+") 
+ml <- ml %>% mutate(volume = ml_v)
+ml$volume <- ml$volume %>% as.numeric()
+ml <- ml %>% mutate(volume = volume*0.0338)
+ml <- ml %>% mutate(unit_price = price/volume/pack)
+combo2 <- rbind(oz, gallon, ml)
+
+# 5.6 With all the information we need, we can compare the unit price of different products
+
+all3 <- rbind(shampoo2, conditioner2, two_in_one2, combo2)
+
+# Here we have to remove some rows with incorrect information
+all3  <- all3[!grepl("bar", all3$product),]
+all3  <- all3[!grepl("pureology hydrate conditioner, 1.7 fl oz", all3$product),]
+all3  <- all3[!grepl("oribe", all3$product),]
+
+all3 %>% ggplot(aes(type, unit_price, color = type)) +
+  geom_boxplot() +
+  scale_color_manual(values=c("limegreen", "orangered")) +
+  facet_wrap(~category, ncol = 4) +
+  ylim(0, 8) +
+  xlab("type of products") +
+  ylab("unit price") +
+  ggtitle("Unit price of Different Hair Care Products in Amazon")
+
+all3 %>% ggplot(aes(category, unit_price, color = category)) +
+  geom_boxplot() +
+  facet_wrap(~type, ncol = 1) +
+  ylim(0, 6) 
+
+# 5.7 Linear relation of unit price ~ total volume of each product
+
+all4 <- all3 %>% mutate(total_volume = volume*pack)
+
+lm(total_volume~unit_price, data = all4)
+
+all4 %>% ggplot(aes(total_volume, unit_price, color = type)) +
+   geom_point() +
+   xlim(0, 40)+
+   ylim(0, 6) +
+   geom_smooth() +
+   scale_color_manual(values=c("purple", "skyblue2")) +
+   facet_wrap(~category, ncol = 4) +
+   xlab("total volume provided") +
+   ylab("unit price") +
+   ggtitle("Unit Price-Volume Provided Relation of Different Products")
