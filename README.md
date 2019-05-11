@@ -1,2 +1,2 @@
-# products
-Data scraping from Twitter and Amazon for the topic of natural shampoos and conditioners
+# Final Project for Data Wrangling Class
+# Data scraping from Twitter and Amazon for the topic of natural shampoos and conditioners
